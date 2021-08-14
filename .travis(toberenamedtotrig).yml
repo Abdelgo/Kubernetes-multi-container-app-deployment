@@ -1,0 +1,27 @@
+sudo: required
+services:
+  - docker
+env:
+  global:
+    - SHA=$(git rev-parse HEAD) # to get the revision
+    - CLOUDSDK_CORE_DISABLE_PROMPTS=1 # disable any prompt from google SDK
+before_install:
+  - openssl aes-256-cbc -K $encrypted_9f3b5599b056_key -iv $encrypted_9f3b5599b056_iv -in service-account.json.enc -out service-account.json -d # decryption to get the service-account.json to be placed in our root project directory
+  - curl https://sdk.cloud.google.com | bash > /dev/null; # download the SDK inside /dev/null
+  - source $HOME/google-cloud-sdk/path.bash.inc # execute the path.bash.inc
+  - gcloud components update kubectl # update Kubectl
+  - gcloud auth activate-service-account --key-file service-account.json # authenticate to the GCP account
+  - gcloud config set project steady-petal-307322 # select the project ID
+  - gcloud config set compute/zone us-central1-c # the zone of the kubernetes ressource
+  - gcloud container clusters get-credentials multi-cluster # name of the kubernetes cluster
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin # connect to docker account (env var)
+  - docker build -t goahead19/react-test -f ./client/Dockerfile.dev ./client # build the client image in github repo to use it for test
+
+script:
+  - docker run -e CI=true goahead19/react-test npm test # run the tests
+
+deploy: # as there is no built in deploy for Kubernetes, we use a script
+  provider: script
+  script: bash ./deploy.sh # execute this script
+  on:
+    branch: master # only if push is from master branch
